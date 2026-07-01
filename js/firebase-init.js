@@ -8,12 +8,13 @@ import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstati
 // ATENÇÃO: Terá de substituir as chaves abaixo pelas chaves reais do projeto 
 // que criar na consola do Firebase (https://console.firebase.google.com/)
 const firebaseConfig = {
-  apiKey: "SUA_API_KEY",
-  authDomain: "seu-projeto.firebaseapp.com",
-  projectId: "seu-projeto",
-  storageBucket: "seu-projeto.appspot.com",
-  messagingSenderId: "123456789",
-  appId: "1:123456789:web:abcdef"
+  apiKey: "AIzaSyDCgXY-Ub7zSxfWvlZ9-a6Dwp0P8jFuELI",
+  authDomain: "loja-gaia.firebaseapp.com",
+  projectId: "loja-gaia",
+  storageBucket: "loja-gaia.firebasestorage.app",
+  messagingSenderId: "454074503857",
+  appId: "1:454074503857:web:d4cd0a1d7141cf7593c890",
+  measurementId: "G-6PXRRQY561"
 };
 
 const app = initializeApp(firebaseConfig);
