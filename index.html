@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Loja GAIA Robótica — UFTM</title>
+<meta name="description" content="Kits, camisetas e chaveiros da GAIA Robótica UFTM. Escolha, monte seu pedido e finalize direto pelo WhatsApp.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <a href="index.html" class="brand">
+      <svg class="brand-mark" viewBox="0 0 40 40" fill="none">
+        <circle cx="20" cy="20" r="19" stroke="#4cffb3" stroke-width="1.4"/>
+        <circle cx="20" cy="20" r="4" fill="#4cffb3"/>
+        <path d="M20 2v6M20 32v6M2 20h6M32 20h6M8 8l4 4M28 28l4 4M32 8l-4 4M8 32l4-4" stroke="#4cffb3" stroke-width="1.2"/>
+      </svg>
+      <span>GAIA<small>LOJA · UFTM</small></span>
+    </a>
+    <div class="nav-actions">
+      <a href="https://www.instagram.com/gaia.robotica/" target="_blank" rel="noopener" class="icon-btn" aria-label="Instagram da GAIA">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="1"/></svg>
+      </a>
+      <button id="cart-toggle" class="icon-btn" aria-label="Abrir carrinho">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 4h2l2.4 12.2a2 2 0 0 0 2 1.8h8.2a2 2 0 0 0 2-1.6L21 8H6"/><circle cx="9" cy="21" r="1"/><circle cx="18" cy="21" r="1"/></svg>
+        <span id="cart-count" class="cart-count" style="display:none">0</span>
+      </button>
+    </div>
+  </div>
+</header>
+
+<section class="hero">
+  <svg class="hero-trace" viewBox="0 0 1180 420" preserveAspectRatio="none" aria-hidden="true">
+    <path d="M -20 340 L 200 340 L 240 300 L 460 300 L 500 260 L 780 260 L 820 220 L 1050 220 L 1090 180 L 1220 180"
+          fill="none" stroke="#26305e" stroke-width="2"/>
+    <circle cx="200" cy="340" r="3.5" fill="#4cffb3"/>
+    <circle cx="500" cy="260" r="3.5" fill="#3e6bff"/>
+    <circle cx="820" cy="220" r="3.5" fill="#4cffb3"/>
+    <circle r="4" fill="#4cffb3">
+      <animateMotion dur="6s" repeatCount="indefinite"
+        path="M -20 340 L 200 340 L 240 300 L 460 300 L 500 260 L 780 260 L 820 220 L 1050 220 L 1090 180 L 1220 180"/>
+    </circle>
+  </svg>
+  <div class="wrap hero-content">
+    <span class="eyebrow">// gaia.robotica · programa de extensão UFTM</span>
+    <h1>Vista o que a gente <span class="accent">constrói</span>.</h1>
+    <p>Kits, camisetas e chaveiros da GAIA Robótica e EletroQuad. Cada peça ajuda a financiar as competições da equipe — escolha, monte seu pedido e finalize direto no WhatsApp.</p>
+    <div class="hero-ctas">
+      <a href="#produtos" class="btn btn-primary">Ver produtos</a>
+      <a href="https://linktr.ee/gaiarobotica" target="_blank" rel="noopener" class="btn btn-ghost">Nossos projetos</a>
+    </div>
+    <div class="hero-badges">
+      <span class="badge"><span class="dot"></span> Top 3 Eletroquad SAE Brasil</span>
+      <span class="badge"><span class="dot"></span> Sem burocracia — pedido pelo WhatsApp</span>
+    </div>
+  </div>
+</section>
+
+<section class="section" id="produtos">
+  <div class="wrap" id="product-section-top">
+    <div class="section-head">
+      <div>
+        <h2>Produtos</h2>
+        <p>Toda renda apoia direto os projetos da equipe.</p>
+      </div>
+    </div>
+    <div class="filters" id="filters"></div>
+    <div class="product-grid" id="product-grid">
+      <div class="empty-state">Carregando produtos…</div>
+    </div>
+  </div>
+</section>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <span>GAIA Robótica &amp; EletroQuad — UFTM · Programa de Extensão</span>
+    <div class="footer-links">
+      <a href="https://www.instagram.com/gaia.robotica/" target="_blank" rel="noopener">Instagram</a>
+      <a href="https://linktr.ee/gaiarobotica" target="_blank" rel="noopener">Linktree</a>
+      <a href="admin.html">Admin</a>
+    </div>
+  </div>
+</footer>
+
+<div class="cart-overlay" id="cart-overlay"></div>
+<aside class="cart-drawer" id="cart-drawer" aria-label="Carrinho de compras">
+  <div class="cart-head">
+    <h3>Seu carrinho</h3>
+    <button class="cart-close" id="cart-close" aria-label="Fechar carrinho">✕</button>
+  </div>
+  <div class="cart-items" id="cart-items"></div>
+  <div class="cart-foot">
+    <div class="cart-total-row"><span>Total</span><strong id="cart-total">R$ 0,00</strong></div>
+    <button class="btn btn-primary" id="checkout-btn" style="width:100%; justify-content:center;" disabled>
+      Finalizar pedido no WhatsApp
+    </button>
+    <p class="cart-note">Ao finalizar, abrimos o WhatsApp com seu pedido já preenchido — só confirmar e combinar retirada/pagamento com a equipe.</p>
+  </div>
+</aside>
+
+<script type="module" src="js/store.js"></script>
+</body>
+</html>
