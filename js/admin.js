@@ -1,201 +1,121 @@
-/* js/store.js */
-import { db, collection, getDocs, query, orderBy } from "./firebase-init.js"; // Certifique-se de que o caminho está correto
+import {db, auth, storage, ADMIN_EMAILS, collection, doc, getDocs, addDoc, updateDoc,
+  serverTimestamp, signInWithEmailAndPassword, signOut, onAuthStateChanged,
+  ref, uploadBytes, getDownloadURL} from './firebase-init.js';
+import {productData, imageUrl} from './product-data.mjs';
 
-// --- CONFIGURAÇÃO ---
-const WHATSAPP_NUMBER = "5534999999999"; // Coloque o DDD e número do Gaia aqui (Ex: 5534...)
-const CATEGORIES = { kit: "Kits", camiseta: "Camisetas", chaveiro: "Chaveiros", outro: "Outros" };
-
-let products = [];
-let cart = JSON.parse(localStorage.getItem("gaia_cart")) || [];
-
-// --- ELEMENTOS DOM ---
-const productGrid = document.getElementById("product-grid");
-const cartOverlay = document.getElementById("cart-overlay");
-const cartDrawer = document.getElementById("cart-drawer");
-const cartToggleBtn = document.getElementById("cart-toggle");
-const cartCloseBtn = document.getElementById("cart-close");
-const cartItemsContainer = document.getElementById("cart-items");
-const cartTotalEl = document.getElementById("cart-total");
-const checkoutBtn = document.getElementById("checkout-btn");
-const cartCount = document.getElementById("cart-count");
-
-// --- INICIALIZAÇÃO ---
-async function initStore() {
-  updateCartUI();
-  try {
-    const snap = await getDocs(query(collection(db, "produtos"), orderBy("nome")));
-    products = snap.docs
-      .map((d) => ({ id: d.id, ...d.data() }))
-      .filter((p) => p.ativo !== false); // Apenas produtos ativos
-    
-    renderProducts(products);
-  } catch (err) {
-    console.error("Erro ao buscar produtos:", err);
-    productGrid.innerHTML = `<div class="empty-state">Erro ao carregar produtos. Tente novamente.</div>`;
-  }
+const el = id => document.getElementById(id);
+let currentUser = null, editing = null, busy = false;
+// UI convenience only: Firestore/Storage rules must enforce authorization.
+const allowed = user => Boolean(user && ADMIN_EMAILS.some(email => email.toLowerCase() === user.email?.toLowerCase())
+  && !['seu-email@gmail.com', 'outro-membro@uftm.edu.br'].includes(user.email?.toLowerCase()));
+function requireAdmin() {
+  if (!allowed(currentUser)) throw new Error('Sessao de administrador necessaria.');
 }
-
-function renderProducts(lista) {
-  if (lista.length === 0) {
-    productGrid.innerHTML = `<div class="empty-state">Nenhum produto disponível no momento.</div>`;
-    return;
-  }
-
-  productGrid.innerHTML = lista.map((p) => {
-    const hasVariants = Array.isArray(p.variantes) && p.variantes.length > 0;
-    
-    let variantSelectHTML = "";
-    if (hasVariants) {
-      const options = p.variantes
-        .filter(v => v.estoque > 0)
-        .map(v => `<option value="${v.nome}">Tamanho: ${v.nome}</option>`)
-        .join("");
-      
-      variantSelectHTML = options ? `<select id="var-${p.id}" class="product-select">${options}</select>` : `<p style="color:var(--danger); font-size:12px;">Esgotado</p>`;
-    } else if (p.estoque <= 0) {
-      variantSelectHTML = `<p style="color:var(--danger); font-size:12px;">Esgotado</p>`;
+function status(message, error = false) {
+  el('form-status').textContent = message;
+  el('form-status').className = error ? 'form-error' : 'form-success';
+}
+function variantsVisibility() {
+  el('variantes-field').style.display = el('f-has-variantes').checked ? 'block' : 'none';
+  el('estoque-field').style.display = el('f-has-variantes').checked ? 'none' : 'block';
+}
+function addVariant(value = {nome: '', estoque: 0}) {
+  const row = document.createElement('div'); row.className = 'variant-editor-row';
+  const name = document.createElement('input');
+  name.value = value.nome; name.placeholder = 'Tamanho'; name.setAttribute('aria-label', 'Tamanho');
+  const quantity = document.createElement('input');
+  quantity.type = 'number'; quantity.min = '0'; quantity.step = '1'; quantity.value = value.estoque;
+  quantity.setAttribute('aria-label', 'Estoque do tamanho');
+  const remove = document.createElement('button');
+  remove.type = 'button'; remove.textContent = 'Remover'; remove.onclick = () => row.remove();
+  row.append(name, quantity, remove); el('variant-editor').append(row);
+}
+function resetForm() {
+  editing = null; el('product-form').reset(); el('variant-editor').replaceChildren();
+  el('form-title').textContent = 'Novo Produto'; el('cancel-edit-btn').style.display = 'none'; variantsVisibility();
+}
+function editProduct(id, product) {
+  if (busy) return;
+  resetForm(); editing = id;
+  for (const field of ['nome', 'categoria', 'preco', 'descricao', 'estoque']) el('f-' + field).value = product[field] ?? '';
+  el('f-imagem-url').value = product.imagemUrl || ''; el('f-ativo').checked = product.ativo !== false;
+  const variants = Array.isArray(product.variantes) ? product.variantes : [];
+  el('f-has-variantes').checked = variants.length > 0; variants.forEach(addVariant); variantsVisibility();
+  el('form-title').textContent = 'Editar Produto'; el('cancel-edit-btn').style.display = 'inline-block';
+}
+async function loadProducts() {
+  requireAdmin(); const user = currentUser;
+  const snapshot = await getDocs(collection(db, 'produtos'));
+  if (currentUser !== user || !allowed(currentUser)) return;
+  const body = el('product-table-body'); body.replaceChildren();
+  for (const item of snapshot.docs) {
+    const product = item.data(), row = document.createElement('tr'), picture = document.createElement('td');
+    try {
+      if (product.imagemUrl) {
+        const img = document.createElement('img'); img.src = imageUrl(product.imagemUrl);
+        img.alt = String(product.nome || 'Produto'); picture.append(img);
+      }
+    } catch { picture.textContent = 'URL invalida'; }
+    row.append(picture);
+    const total = Array.isArray(product.variantes) && product.variantes.length
+      ? product.variantes.reduce((sum, v) => sum + Number(v.estoque || 0), 0) : product.estoque;
+    for (const value of [product.nome + ' / ' + product.categoria,
+      Number(product.preco).toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'}),
+      total ?? 'Nao informado', product.ativo === false ? 'Inativo' : 'Ativo']) {
+      const cell = document.createElement('td'); cell.textContent = String(value); row.append(cell);
     }
-
-    const canBuy = (hasVariants && variantSelectHTML.includes("<option")) || (!hasVariants && p.estoque > 0);
-
-    return `
-      <div class="product-card">
-        ${p.imagemUrl ? `<img src="${p.imagemUrl}" class="product-img" alt="${p.nome}">` : `<div class="product-img"></div>`}
-        <span class="product-cat">${CATEGORIES[p.categoria] || p.categoria}</span>
-        <h3 class="product-title">${p.nome}</h3>
-        <div class="product-price">${p.preco.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</div>
-        ${variantSelectHTML}
-        <button class="btn btn-primary" onclick="window.addToCart('${p.id}')" ${!canBuy ? "disabled" : ""} style="width: 100%; justify-content: center;">
-          ${canBuy ? "Adicionar" : "Indisponível"}
-        </button>
-      </div>
-    `;
-  }).join("");
+    const actions = document.createElement('td'), button = document.createElement('button');
+    button.type = 'button'; button.textContent = 'Editar'; button.onclick = () => editProduct(item.id, product);
+    actions.append(button); row.append(actions); body.append(row);
+  }
+  if (!snapshot.docs.length) body.textContent = 'Nenhum produto cadastrado.';
 }
-
-// --- LÓGICA DO CARRINHO ---
-window.addToCart = (productId) => {
-  const product = products.find(p => p.id === productId);
-  if (!product) return;
-
-  const hasVariants = Array.isArray(product.variantes) && product.variantes.length > 0;
-  let variantName = null;
-
-  if (hasVariants) {
-    const select = document.getElementById(`var-${productId}`);
-    if (!select) return; // Esgotado
-    variantName = select.value;
-  }
-
-  // Verifica se já está no carrinho com a mesma variante
-  const existingItem = cart.find(item => item.id === productId && item.variant === variantName);
-  
-  if (existingItem) {
-    existingItem.qtd += 1;
-  } else {
-    cart.push({
-      id: product.id,
-      nome: product.nome,
-      preco: product.preco,
-      variant: variantName,
-      qtd: 1
-    });
-  }
-
-  saveCart();
-  openCart();
-};
-
-function updateCartUI() {
-  // Atualiza bolinha de quantidade no header
-  const totalItems = cart.reduce((acc, item) => acc + item.qtd, 0);
-  cartCount.textContent = totalItems;
-  cartCount.style.display = totalItems > 0 ? "flex" : "none";
-
-  if (cart.length === 0) {
-    cartItemsContainer.innerHTML = `<p style="text-align:center; color:var(--text-faint); margin-top: 20px;">Seu carrinho está vazio.</p>`;
-    cartTotalEl.textContent = "R$ 0,00";
-    checkoutBtn.disabled = true;
-    return;
-  }
-
-  let total = 0;
-  cartItemsContainer.innerHTML = cart.map((item, index) => {
-    total += item.preco * item.qtd;
-    return `
-      <div class="cart-item">
-        <div class="cart-item-info">
-          <h4>${item.nome}</h4>
-          ${item.variant ? `<span class="cart-item-variant">Tamanho: ${item.variant}</span>` : ""}
-          <div class="product-price" style="font-size:1rem; margin-top:5px;">
-            ${(item.preco * item.qtd).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
-          </div>
-        </div>
-        <div class="cart-item-actions">
-          <button onclick="window.changeQty(${index}, -1)">-</button>
-          <span>${item.qtd}</span>
-          <button onclick="window.changeQty(${index}, 1)">+</button>
-        </div>
-      </div>
-    `;
-  }).join("");
-
-  cartTotalEl.textContent = total.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-  checkoutBtn.disabled = false;
-}
-
-window.changeQty = (index, delta) => {
-  cart[index].qtd += delta;
-  if (cart[index].qtd <= 0) {
-    cart.splice(index, 1);
-  }
-  saveCart();
-};
-
-function saveCart() {
-  localStorage.setItem("gaia_cart", JSON.stringify(cart));
-  updateCartUI();
-}
-
-// --- CHECKOUT WHATSAPP ---
-checkoutBtn.addEventListener("click", () => {
-  if (cart.length === 0) return;
-
-  let text = `Olá! Vim pelo site e gostaria de fazer um pedido na loja do Gaia:\n\n`;
-  let total = 0;
-
-  cart.forEach(item => {
-    total += item.preco * item.qtd;
-    const variantText = item.variant ? ` (${item.variant})` : "";
-    text += `▪ ${item.qtd}x ${item.nome}${variantText} - R$ ${(item.preco * item.qtd).toFixed(2)}\n`;
-  });
-
-  text += `\n*Total estimado: R$ ${total.toFixed(2)}*\n\n`;
-  text += `Gostaria de combinar a retirada e o pagamento.`;
-
-  const encodedText = encodeURIComponent(text);
-  const whatsappUrl = `https://wa.me/${WHATSAPP_NUMBER}?text=${encodedText}`;
-  
-  // Limpa o carrinho após gerar o link (opcional, pode remover se preferir manter)
-  cart = [];
-  saveCart();
-  
-  window.open(whatsappUrl, '_blank');
+el('login-form').addEventListener('submit', async event => {
+  event.preventDefault(); el('login-error').textContent = '';
+  try { await signInWithEmailAndPassword(auth, el('login-email').value.trim(), el('login-senha').value); }
+  catch { el('login-error').textContent = 'Nao foi possivel entrar. Confira credenciais e conexao.'; }
+  finally { el('login-senha').value = ''; }
 });
-
-// --- CONTROLES DA GAVETA ---
-function openCart() {
-  cartDrawer.classList.add("active");
-  cartOverlay.classList.add("active");
-}
-function closeCart() {
-  cartDrawer.classList.remove("active");
-  cartOverlay.classList.remove("active");
-}
-
-cartToggleBtn.addEventListener("click", openCart);
-cartCloseBtn.addEventListener("click", closeCart);
-cartOverlay.addEventListener("click", closeCart);
-
-// Start
-initStore();
+for (const id of ['logout-btn', 'denied-logout-btn']) el(id).addEventListener('click', async () => {
+  try { await signOut(auth); } catch { status('Falha ao encerrar sessao.', true); }
+});
+el('f-has-variantes').addEventListener('change', variantsVisibility);
+el('add-variant-btn').addEventListener('click', () => addVariant());
+el('cancel-edit-btn').addEventListener('click', () => { if (!busy) resetForm(); });
+el('product-form').addEventListener('submit', async event => {
+  event.preventDefault(); if (busy) return;
+  busy = true; el('save-btn').disabled = true; status('Salvando...');
+  const user = currentUser, targetId = editing;
+  let uploadedPath = null, saved = false;
+  try {
+    requireAdmin();
+    const data = productData({nome: el('f-nome').value, categoria: el('f-categoria').value,
+      preco: el('f-preco').value, descricao: el('f-descricao').value, estoque: el('f-estoque').value,
+      imagemUrl: el('f-imagem-url').value.trim(), ativo: el('f-ativo').checked,
+      hasVariants: el('f-has-variantes').checked,
+      variantes: Array.from(el('variant-editor').children, row => ({nome: row.children[0].value, estoque: row.children[1].value}))});
+    const file = el('f-imagem-arquivo').files[0];
+    if (file) {
+      if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size > 5 * 1024 * 1024)
+        throw new Error('Use JPEG, PNG ou WebP de ate 5 MB.');
+      uploadedPath = 'produtos/' + crypto.randomUUID(); const target = ref(storage, uploadedPath);
+      await uploadBytes(target, file, {contentType: file.type}); data.imagemUrl = await getDownloadURL(target);
+    }
+    requireAdmin(); if (currentUser !== user) throw new Error('Sessao mudou; entre novamente.');
+    data.atualizadoEm = serverTimestamp();
+    if (targetId) await updateDoc(doc(db, 'produtos', targetId), data);
+    else await addDoc(collection(db, 'produtos'), {...data, criadoEm: serverTimestamp()});
+    saved = true; resetForm(); status('Produto salvo.'); await loadProducts();
+  } catch (error) {
+    status(saved ? 'Produto salvo, mas a lista nao foi atualizada. Recarregue a pagina.'
+      : String(error.message || error) + (uploadedPath ? ' Upload separado: confira arquivo ' + uploadedPath : ''), true);
+  } finally { busy = false; el('save-btn').disabled = false; }
+});
+onAuthStateChanged(auth, user => {
+  currentUser = user; resetForm(); status(''); el('product-table-body').replaceChildren();
+  el('login-screen').style.display = user ? 'none' : 'grid';
+  el('denied-screen').style.display = user && !allowed(user) ? 'block' : 'none';
+  el('admin-app').style.display = allowed(user) ? 'block' : 'none';
+  el('admin-email').textContent = user?.email || ''; el('denied-email').textContent = user?.email || '';
+  if (allowed(user)) loadProducts().catch(error => status('Falha ao carregar catalogo: ' + error.message, true));
+});

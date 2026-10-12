@@ -1,3 +1,4 @@
+import {escapeHtml as h, imageUrl, readCart} from './product-data.mjs';
 /* js/store.js */
 import { db, collection, getDocs, query, orderBy } from "./firebase-init.js"; // Certifique-se de que o caminho está correto
 
@@ -6,7 +7,7 @@ const WHATSAPP_NUMBER = "5534999733842"; // Coloque o DDD e número do Gaia aqui
 const CATEGORIES = { kit: "Kits", camiseta: "Camisetas", chaveiro: "Chaveiros", outro: "Outros" };
 
 let products = [];
-let cart = JSON.parse(localStorage.getItem("gaia_cart")) || [];
+let cart = readCart(localStorage.getItem("gaia_cart"));
 
 // --- ELEMENTOS DOM ---
 const productGrid = document.getElementById("product-grid");
@@ -25,7 +26,7 @@ async function initStore() {
   try {
     const snap = await getDocs(query(collection(db, "produtos"), orderBy("nome")));
     products = snap.docs
-      .map((d) => ({ id: d.id, ...d.data() }))
+      .map((d) => ({ ...d.data(), id: d.id }))
       .filter((p) => p.ativo !== false); // Apenas produtos ativos
     
     renderProducts(products);
@@ -42,16 +43,18 @@ function renderProducts(lista) {
   }
 
   productGrid.innerHTML = lista.map((p) => {
+    let safeImage = '';
+    try { safeImage = imageUrl(p.imagemUrl); } catch {}
     const hasVariants = Array.isArray(p.variantes) && p.variantes.length > 0;
     
     let variantSelectHTML = "";
     if (hasVariants) {
       const options = p.variantes
         .filter(v => v.estoque > 0)
-        .map(v => `<option value="${v.nome}">Tamanho: ${v.nome}</option>`)
+        .map(v => `<option value="${h(v.nome)}">Tamanho: ${h(v.nome)}</option>`)
         .join("");
       
-      variantSelectHTML = options ? `<select id="var-${p.id}" class="product-select">${options}</select>` : `<p style="color:var(--danger); font-size:12px;">Esgotado</p>`;
+      variantSelectHTML = options ? `<select id="var-${h(p.id)}" class="product-select">${options}</select>` : `<p style="color:var(--danger); font-size:12px;">Esgotado</p>`;
     } else if (p.estoque <= 0) {
       variantSelectHTML = `<p style="color:var(--danger); font-size:12px;">Esgotado</p>`;
     }
@@ -60,18 +63,23 @@ function renderProducts(lista) {
 
     return `
       <div class="product-card">
-        ${p.imagemUrl ? `<img src="${p.imagemUrl}" class="product-img" alt="${p.nome}">` : `<div class="product-img"></div>`}
-        <span class="product-cat">${CATEGORIES[p.categoria] || p.categoria}</span>
-        <h3 class="product-title">${p.nome}</h3>
-        <div class="product-price">${p.preco.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</div>
+        ${safeImage ? `<img src="${h(safeImage)}" class="product-img" alt="${h(p.nome)}">` : `<div class="product-img"></div>`}
+        <span class="product-cat">${h(CATEGORIES[p.categoria] || p.categoria)}</span>
+        <h3 class="product-title">${h(p.nome)}</h3>
+        <div class="product-price">${Number(p.preco).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</div>
         ${variantSelectHTML}
-        <button class="btn btn-primary" onclick="window.addToCart('${p.id}')" ${!canBuy ? "disabled" : ""} style="width: 100%; justify-content: center;">
+        <button class="btn btn-primary" data-product-id="${h(p.id)}" ${!canBuy ? "disabled" : ""} style="width: 100%; justify-content: center;">
           ${canBuy ? "Adicionar" : "Indisponível"}
         </button>
       </div>
     `;
   }).join("");
 }
+
+productGrid.addEventListener('click', event => {
+  const button = event.target.closest('[data-product-id]');
+  if (button && !button.disabled) window.addToCart(button.dataset.productId);
+});
 
 // --- LÓGICA DO CARRINHO ---
 window.addToCart = (productId) => {
@@ -125,8 +133,8 @@ function updateCartUI() {
     return `
       <div class="cart-item">
         <div class="cart-item-info">
-          <h4>${item.nome}</h4>
-          ${item.variant ? `<span class="cart-item-variant">Tamanho: ${item.variant}</span>` : ""}
+          <h4>${h(item.nome)}</h4>
+          ${item.variant ? `<span class="cart-item-variant">Tamanho: ${h(item.variant)}</span>` : ""}
           <div class="product-price" style="font-size:1rem; margin-top:5px;">
             ${(item.preco * item.qtd).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
           </div>
